@@ -99,6 +99,9 @@ def main():
         layout="wide"
     )
 
+    if "authenticated" not in st.session_state:
+        st.session_state.authenticated = False
+
     sheet, collection = get_sheet_and_collection()
 
     with st.sidebar:
