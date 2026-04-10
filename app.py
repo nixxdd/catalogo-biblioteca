@@ -122,7 +122,7 @@ def main():
         total_copies = sum(b.copies for b in collection.books.values())
         st.metric("Copie totali", total_copies)
 
-    if page in ["Aggiungi libro", "Rimuovi libro"]:
+    if page in ["Aggiungi Libro", "Rimuovi Libro"]:
         if not st.session_state.get("authenticated", False):
             st.warning("Password per modificare il catalogo")
             pwd = st.text_input("Password", type="password", key="pwd_sidebar")
