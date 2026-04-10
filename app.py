@@ -2,10 +2,18 @@ import re
 import pandas as pd
 import streamlit as st
 from book import Book, Book_Collection
+import gspread
+from google.oauth2.service_account import Credentials
 import io
 
 EXCEL_PATH = "libri-biblioteca-villalta.xlsx"
 EXPORT_PATH = "catalogo_aggiornato.xlsx"
+
+SCOPES = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive",
+]
+
 
 def _parse_copies(title: str) -> tuple[str, int]:
     """Estrae il numero di copie dal titolo, es. 'Il giocatore (x2)' → ('Il giocatore', 2)."""
@@ -39,11 +47,48 @@ def save_to_excel(collection: Book_Collection, path: str) -> None:
     df.to_excel(path, index=False)
 
 
+########
+# Google Sheets integration (optional, can be used instead of Excel file)
+#######
+
+def get_gsheet():
+    """Connessione al Google Sheet, cached per tutta la sessione."""
+    creds = Credentials.from_service_account_info(
+        st.secrets["gcp_service_account"], scopes=SCOPES
+    )
+    client = gspread.authorize(creds)
+    return client.open_by_key(st.secrets["sheet_id"]).sheet1
+
+
+def load_from_gsheet(sheet) -> Book_Collection:
+    records = sheet.get_all_records()   # → lista di dict {Autore, Titolo, Genere, Copie}
+    collection = Book_Collection()
+    for r in records:
+        if not r.get("Titolo"):
+            continue
+        book = Book(
+            authors=str(r["Autore"]),
+            title=str(r["Titolo"]),
+            genre=str(r.get("Genere", "")),
+            copies=int(r.get("Copie", 1) or 1),
+        )
+        collection.insert_book(book)
+    return collection
+
+
+def save_to_gsheet(collection: Book_Collection, sheet) -> None:
+    df = collection.to_dataframe()[["Autore", "Titolo", "Genere", "Copie"]]
+    sheet.clear()
+    sheet.update([df.columns.tolist()] + df.values.tolist())
+
+
 ## streamlit app
 
-@st.cache_resource # esegui questa funzuione solo la prima volta e poi tieni il risultato in sessione
-def get_collection() -> Book_Collection: # questo è un helper per caricare la collezione una sola volta e tenerla in sessione
-    return load_from_excel(EXCEL_PATH)
+@st.cache_resource
+def get_sheet_and_collection():
+    sheet = get_gsheet()
+    collection = load_from_gsheet(sheet)
+    return sheet, collection
 
 
 def main():
@@ -54,7 +99,7 @@ def main():
         layout="wide"
     )
 
-    collection = get_collection()
+    sheet, collection = get_sheet_and_collection()
 
     with st.sidebar:
         st.title("Catalogo Biblioteca Villalta")
@@ -140,11 +185,10 @@ def main():
                     authors = [a.strip() for a in authors_raw.split(";") if a.strip()]
                     new_book = Book(authors=authors, title=title.strip(), genre=genre.strip(), copies=copies)
                     msg = collection.insert_book(new_book)
-                    save_to_excel(collection, EXCEL_PATH) # salva subito su excel per mantenere sincronizzato il file
+                    save_to_gsheet(collection, sheet)   # ← salva su Google Sheets
                     st.success(msg)
-                    # invalida cache per aggiornare il catalogo
-                    get_collection.clear()
-                    st.rerun()  
+                    get_sheet_and_collection.clear()
+                    st.rerun()
 
     elif page == "Rimuovi Libro":
         st.header("Rimuovi un Libro")
@@ -161,12 +205,12 @@ def main():
 
         selected_label = st.selectbox("Seleziona un libro da rimuovere", list(options.keys()))
 
-        if st.button("Rimuovi", type="secondary"):
+        if st.button("🗑️ Elimina", type="secondary"):
             key = options[selected_label]
             msg = collection.delete_book(key)
-            save_to_excel(collection, EXCEL_PATH) # salva subito su excel per mantenere sincronizzato il file
+            save_to_gsheet(collection, sheet)       # ← salva su Google Sheets
             st.success(msg)
-            get_collection.clear()
+            get_sheet_and_collection.clear()
             st.rerun()
     
     elif page == "Esporta Catalogo":
@@ -179,6 +223,7 @@ def main():
         df = collection.to_dataframe()
         st.dataframe(df, use_container_width=True, hide_index=True)
 
+        import io
         buf = io.BytesIO()
         with pd.ExcelWriter(buf, engine="openpyxl") as writer:
             df.to_excel(writer, index=False, sheet_name="Catalogo")
