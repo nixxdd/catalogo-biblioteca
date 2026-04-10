@@ -48,11 +48,11 @@ def save_to_excel(collection: Book_Collection, path: str) -> None:
 
 
 ########
-# Google Sheets integration (optional, can be used instead of Excel file)
+# Google Sheets integrationn
 #######
 
 def get_gsheet():
-    """Connessione al Google Sheet, cached per tutta la sessione."""
+    """Connessione al Google Sheet, cached per tutta la sessione"""
     creds = Credentials.from_service_account_info(
         st.secrets["gcp_service_account"], scopes=SCOPES
     )
@@ -118,6 +118,18 @@ def main():
         st.metric("Titoli distinti", len(collection.books))
         total_copies = sum(b.copies for b in collection.books.values())
         st.metric("Copie totali", total_copies)
+
+    if page in ["Aggiungi libro", "Rimuovi libro"]:
+        if not st.session_state.get("authenticated", False):
+            st.warning("Password per modificare il catalogo")
+            pwd = st.text_input("Password", type="password", key="pwd_sidebar")
+            if st.button("Entra"):
+                if pwd == st.secrets["app_password"]:
+                    st.session_state.authenticated = True
+                    st.rerun()
+                else:
+                    st.error("Password errata")
+            st.stop()
 
     if page == "Visualizza Catalogo":
         st.header("Catalogo dei Libri")
@@ -212,6 +224,7 @@ def main():
             st.success(msg)
             get_sheet_and_collection.clear()
             st.rerun()
+
     
     elif page == "Esporta Catalogo":
         st.header("Esporta Catalogo Aggiornato")
