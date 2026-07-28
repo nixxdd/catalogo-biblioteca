@@ -36,7 +36,7 @@ def load_from_excel(path: str) -> Book_Collection:
         book = Book(
             authors=str(row["autore"]).strip(),
             title=title,
-            genre=str(row["genere"]).strip() if pd.notna(row["genere"]) else "",
+            genre=str(row["genere"]).lower().strip() if pd.notna(row["genere"]) else "",
             copies=copies,
         )
         collection.insert_book(book)
@@ -51,13 +51,19 @@ def save_to_excel(collection: Book_Collection, path: str) -> None:
 # Google Sheets integrationn
 #######
 
-def get_gsheet():
-    """Connessione al Google Sheet, cached per tutta la sessione"""
+@st.cache_resource
+def get_sheet():
     creds = Credentials.from_service_account_info(
         st.secrets["gcp_service_account"], scopes=SCOPES
     )
     client = gspread.authorize(creds)
     return client.open_by_key(st.secrets["sheet_id"]).sheet1
+
+
+def get_sheet_and_collection():
+    sheet = get_sheet()
+    collection = load_from_gsheet(sheet)
+    return sheet, collection
 
 
 def load_from_gsheet(sheet) -> Book_Collection:
@@ -81,14 +87,6 @@ def save_to_gsheet(collection: Book_Collection, sheet) -> None:
     sheet.clear()
     sheet.update([df.columns.tolist()] + df.values.tolist())
 
-
-## streamlit app
-
-@st.cache_resource
-def get_sheet_and_collection():
-    sheet = get_gsheet()
-    collection = load_from_gsheet(sheet)
-    return sheet, collection
 
 
 def main():
@@ -202,7 +200,7 @@ def main():
                     msg = collection.insert_book(new_book)
                     save_to_gsheet(collection, sheet)   # ← salva su Google Sheets
                     st.success(msg)
-                    get_sheet_and_collection.clear()
+                    # get_sheet_and_collection.clear()
                     st.rerun()
 
     elif page == "Rimuovi Libro":
@@ -225,7 +223,7 @@ def main():
             msg = collection.delete_book(key)
             save_to_gsheet(collection, sheet)       # ← salva su Google Sheets
             st.success(msg)
-            get_sheet_and_collection.clear()
+            # get_sheet_and_collection.clear()
             st.rerun()
 
     

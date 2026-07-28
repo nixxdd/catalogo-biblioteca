@@ -44,6 +44,10 @@ class Book:
     surname = self.authors[0].split()[0] if self.authors else "unknown"
     clean_title = re.sub(r"[^\w]", "", self.title.lower())
     return f"{surname.lower()}_{clean_title}"
+
+  @staticmethod
+  def _normalize_genre(genre: str) -> str:
+     return re.sub(r"\s+", " ", str(genre or "").strip()).lower()
   
   def __repr__(self) -> str:
     return f"Book({self.key!r}, copies={self.copies})"
@@ -53,11 +57,14 @@ class Book_Collection:
   def __init__(self):
     self.books = {}
 
-  def insert_book(self, book : Book):
+  def insert_book(self, book: Book):
     if book.key in self.books:
-      self.books[book.key].copies += book.copies
-      return f"Libro già presente, copie aggiornate a {self.books[book.key].copies}"
-    
+        existing = self.books[book.key]
+        existing.copies += book.copies
+        if book.genre:
+            existing.genre = book.genre
+        return f"Libro già presente, copie aggiornate a {existing.copies}"
+
     self.books[book.key] = book
     return f"Libro inserito nella collezione: {book.title}"
 
